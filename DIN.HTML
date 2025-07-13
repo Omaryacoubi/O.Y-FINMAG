@@ -2,657 +2,588 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>O.Y-FINMAG</title>
+  <title>o.y-finmag Ultimate Trader Suite</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Plotly für Charts -->
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- jsPDF & autoTable für PDF-Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* =======================
-       GLOBALE VARIABLEN & RESET
-       ======================= */
     :root {
-      --bg: #0d0d0d;
+      --bg: rgba(13,13,13,0.95);
       --fg: #f2f2f2;
-      --card: #1a1a1a;
+      --card: rgba(26,26,26,0.9);
+      --overlay: rgba(0,0,0,0.6);
       --pos: #00ff88;
       --neg: #ff0055;
       --line: #00eaff;
       --font: 'Segoe UI', Arial, sans-serif;
       --gap: 12px;
-      --modal-bg: rgba(0,0,0,0.8);
-      --btn-bg: #00eaff;
-      --btn-fg: #0d0d0d;
+      --radius: 8px;
+      --trans: 0.3s ease;
     }
     *, *::before, *::after {
-      box-sizing: border-box;
+      box-sizing: border-box; margin:0; padding:0;
     }
     body {
-      margin: 0;
-      padding: 0;
       font-family: var(--font);
       background: var(--bg);
       color: var(--fg);
+      overflow: hidden;
+      height: 100vh;
       display: grid;
       grid-template-rows: auto 1fr auto;
-      height: 100vh;
     }
-    h1, h2 { margin: 0; }
-    button {
-      cursor: pointer;
-      background: var(--btn-bg);
-      color: var(--btn-fg);
-      border: none;
-      border-radius: 4px;
-      padding: 6px 10px;
-      font-size: 0.9rem;
-    }
-    select, input {
-      background: var(--card);
-      color: var(--fg);
-      border: 1px solid #333;
-      border-radius: 4px;
-      padding: 4px 8px;
-    }
-    /* ================
-       HEADER STYLES
-       ================ */
     header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: var(--gap) calc(var(--gap)*2);
-      border-bottom: 1px solid #333;
-      position: sticky;
-      top: 0;
-      background: var(--bg);
-      z-index: 100;
+      display:flex; justify-content:space-between; align-items:center;
+      padding:var(--gap) calc(var(--gap)*2);
+      backdrop-filter:blur(8px); background:rgba(13,13,13,0.8); z-index:100;
     }
-    #header-left { display: flex; align-items: center; gap: var(--gap); }
-    #markets { font-size: 0.9rem; }
-    #header-right { display: flex; align-items: center; gap: var(--gap); }
-    #clock, #current-price { font-weight: bold; font-size: 1rem; }
-    /* =================
-       MAIN LAYOUT
-       ================= */
-    main {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: var(--gap);
-      padding: var(--gap);
-      overflow-y: auto;
+    #header-left h1 { font-size:1.6rem; margin-right:var(--gap); }
+    #sessions { font-size:0.9rem; }
+    #header-right { display:flex; align-items:center; gap:var(--gap); }
+    select, button, input { font-size:0.9rem; border-radius:4px; border:none; }
+    select, input { background: var(--card); color: var(--fg); padding:6px 8px; }
+    button { background: var(--line); color: var(--bg); padding:6px 12px; cursor:pointer; transition:background var(--trans); }
+    button:hover { background: var(--pos); }
+    main { display:grid; grid-template-columns:3fr 1fr; gap:var(--gap); padding:var(--gap); overflow:hidden; }
+    #chart-panel {
+      position:relative; background:var(--card); border-radius:var(--radius);
+      display:grid; grid-template-rows:auto 1fr auto; overflow:hidden;
     }
-    /* Charts */
-    .chart-container {
-      position: relative;
-      background: var(--card);
-      border-radius: 8px;
-      padding-top: 32px;
-      height: 360px;
+    #chart-toolbar {
+      display:flex; align-items:center; gap:var(--gap);
+      padding:var(--gap); background:rgba(0,0,0,0.2); backdrop-filter:blur(4px);
     }
-    .chart-title {
-      position: absolute;
-      top: 8px;
-      left: 16px;
-      font-size: 1rem;
-      font-weight: bold;
+    #chart-main { width:100%; height:100%; cursor:pointer; }
+    #chart-summary { background:#111; padding:var(--gap); border-top:1px solid #333; font-size:0.9rem; }
+    .option-popup {
+      position:absolute; top:var(--gap); right:var(--gap);
+      background:var(--card); border-radius:var(--radius); padding:var(--gap);
+      box-shadow:0 0 10px rgba(0,0,0,0.5);
+      opacity:0; visibility:hidden; transition:opacity var(--trans), visibility var(--trans);
     }
-    /* News */
-    #news {
-      display: flex;
-      flex-direction: column;
-      gap: var(--gap);
+    .option-popup.active { opacity:1; visibility:visible; }
+    .option-popup h3 { margin-bottom:8px; }
+    .option-popup label { display:flex; align-items:center; gap:4px; margin-bottom:8px; }
+    /* Sidebar */
+    #sidebar { display:grid; grid-template-rows:auto 1fr 1fr; gap:var(--gap); overflow-y:auto; padding-right:4px; }
+    #live-ticker, #news, #portfolio {
+      background:var(--card); border-radius:var(--radius); padding:var(--gap); position:relative;
+    }
+    #live-ticker h2, #news h2, #portfolio h2 { display:flex; align-items:center; gap:8px; margin-bottom:var(--gap); }
+    .ticker-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:4px; }
+    .ticker-item {
+      background:rgba(34,34,34,0.8); padding:4px 8px; border-radius:4px;
+      display:flex; justify-content:space-between; font-size:0.85rem;
     }
     .news-item {
-      display: grid;
-      grid-template-columns: 80px 1fr;
-      background: var(--card);
-      border-radius: 6px;
-      overflow: hidden;
-      transition: transform .2s;
+      display:grid; grid-template-columns:80px 1fr; gap:8px;
+      background:rgba(17,17,17,0.8); padding:8px; border-radius:6px; cursor:pointer;
+      transition:transform var(--trans);
     }
-    .news-item:hover {
-      transform: translateY(-2px);
+    .news-item:hover { transform:translateY(-2px); }
+    .news-thumb { width:80px; height:80px; object-fit:cover; border-radius:4px; background:#333; }
+    .news-content { display:flex; flex-direction:column; }
+    .news-title { font-size:0.95rem; margin-bottom:4px; }
+    .news-meta { font-size:0.75rem; color:#888; display:flex; justify-content:space-between; }
+    /* News Detail */
+    #news-detail-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:var(--overlay); display:flex; align-items:center; justify-content:center;
+      visibility:hidden; opacity:0; transition:opacity var(--trans);
     }
-    .news-thumb {
-      width: 80px;
-      height: 80px;
-      object-fit: cover;
-      background: #333;
+    #news-detail-overlay.active { visibility:visible; opacity:1; }
+    #news-detail {
+      background:var(--card); border-radius:var(--radius);
+      max-width:600px; max-height:80%; overflow-y:auto; padding:var(--gap); position:relative;
     }
-    .news-content {
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
+    #news-detail .close-btn {
+      position:absolute; top:var(--gap); right:var(--gap);
+      background:none; border:none; color:var(--fg); font-size:1.2rem; cursor:pointer;
     }
-    .news-title {
-      font-size: 0.95rem;
-      line-height: 1.2;
+    .tags { display:flex; gap:4px; margin-top:8px; }
+    .tag {
+      background:rgba(0,234,255,0.2); color:var(--line);
+      padding:2px 6px; border-radius:4px; font-size:0.75rem;
     }
-    .news-meta {
-      margin-top: auto;
-      font-size: 0.75rem;
-      color: #888;
-      display: flex;
-      justify-content: space-between;
+    /* Portfolio */
+    #portfolio table { width:100%; border-collapse:collapse; margin-top:var(--gap); font-size:0.9rem; }
+    #portfolio th, #portfolio td { padding:6px; border-bottom:1px solid #333; text-align:left; }
+    #portfolio th { background:rgba(34,34,34,0.8); }
+    #portfolio button { padding:4px 8px; font-size:0.8rem; }
+    /* Floating Rechner */
+    #calc-panel {
+      position:fixed; bottom:var(--gap); right:var(--gap);
+      width:300px; background:var(--card); border-radius:var(--radius);
+      box-shadow:0 0 20px rgba(0,0,0,0.7); overflow:hidden;
+      transform:translateY(110%); transition:transform var(--trans); z-index:200;
     }
-    /* =================
-       FOOTER (TICKER)
-       ================= */
+    #calc-panel.active { transform:translateY(0); }
+    #calc-header {
+      background:rgba(0,0,0,0.3); padding:var(--gap);
+      display:flex; justify-content:space-between; align-items:center; cursor:pointer;
+    }
+    #calc-body { padding:var(--gap); display:grid; grid-template-rows:auto 1fr; }
+    #calc-display {
+      width:100%; padding:8px; font-size:1.2rem; margin-bottom:var(--gap);
+      background:rgba(0,0,0,0.2); color:var(--fg); border-radius:4px;
+    }
+    #calc-buttons { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+    #calc-buttons button {
+      background:rgba(0,0,0,0.4); padding:10px; border-radius:4px; transition:background var(--trans);
+    }
+    #calc-buttons button:hover { background:rgba(0,0,0,0.6); }
     footer {
-      padding: var(--gap) calc(var(--gap)*2);
-      border-top: 1px solid #333;
-      display: flex;
-      gap: var(--gap);
-      overflow-x: auto;
-      background: var(--bg);
-    }
-    .ticker-item {
-      padding: 4px 8px;
-      background: var(--card);
-      border-radius: 4px;
-      white-space: nowrap;
-      font-size: 0.85rem;
-    }
-    /* =================
-       MODAL STYLES
-       ================= */
-    .modal-overlay {
-      position: fixed;
-      top:0; left:0; right:0; bottom:0;
-      background: var(--modal-bg);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 200;
-    }
-    .modal-overlay.active {
-      display: flex;
-    }
-    .modal {
-      background: var(--card);
-      border-radius: 8px;
-      padding: var(--gap);
-      max-width: 90%;
-      max-height: 90%;
-      overflow-y: auto;
-      position: relative;
-    }
-    .modal h2 {
-      margin-top: 0;
-    }
-    .modal-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: transparent;
-      color: var(--fg);
-      font-size: 1.2rem;
-    }
-    /* =================
-       RESPONSIVE
-       ================= */
-    @media (max-width: 900px) {
-      main {
-        grid-template-columns: 1fr;
-      }
-      .chart-container { height: 280px; }
+      background:rgba(13,13,13,0.8); padding:var(--gap) calc(var(--gap)*2);
+      border-top:1px solid #333; backdrop-filter:blur(8px); display:flex; gap:var(--gap); overflow-x:auto;
     }
   </style>
 </head>
 <body>
 
-  <!-- =================
-       HEADER
-       ================= -->
+  <!-- Audio für Trade-Sound -->
+  <audio id="trade-sound" src="https://actions.google.com/sounds/v1/cash/register.ogg" preload="auto"></audio>
+
+  <!-- HEADER -->
   <header>
     <div id="header-left">
-      <h1>❄️ Eismachine Ultimate</h1>
-      <div id="markets">…</div>
+      <h1>o.y-finmag</h1>
+      <div id="sessions">…</div>
     </div>
     <div id="header-right">
-      <label>
-        Symbol:
-        <select id="symbol-select"></select>
-      </label>
+      <select id="symbol-select"></select>
       <div id="current-price">–</div>
-      <label>
-        Währung:
-        <select id="currency-select">
-          <option>EUR</option>
-          <option>USD</option>
-          <option>INR</option>
-          <option>GBP</option>
-          <option>JPY</option>
-        </select>
-      </label>
+      <select id="currency-select">
+        <option>EUR</option><option>USD</option><option>GBP</option><option>JPY</option>
+      </select>
       <div id="clock">--:--:--</div>
     </div>
   </header>
 
-  <!-- =================
-       MAIN CONTENT
-       ================= -->
+  <!-- MAIN -->
   <main>
-    <!-- Chart-Bereich -->
-    <section id="charts">
-      <div class="chart-container" id="chart-main">
-        <div class="chart-title" id="chart-title">Wähle ein Symbol</div>
+    <!-- Chart & Toolbar -->
+    <section id="chart-panel">
+      <div id="chart-toolbar">
+        <button id="btn-options"><i class="fa fa-gear"></i> Optionen</button>
+        <button id="btn-summary"><i class="fa fa-clock"></i> Zusammenfassen</button>
+        <button id="btn-export-csv"><i class="fa fa-file-csv"></i> CSV</button>
+        <button id="btn-export-pdf"><i class="fa fa-file-pdf"></i> PDF</button>
+        <div style="margin-left:auto">
+          <button id="btn-buy" disabled><i class="fa fa-cart-plus"></i> Kaufen</button>
+          <button id="btn-sell" disabled><i class="fa fa-cart-arrow-down"></i> Verkaufen</button>
+        </div>
+      </div>
+      <div id="chart-main"></div>
+      <div id="chart-summary">Wähle ein Symbol …</div>
+      <div class="option-popup" id="popup-options">
+        <h3>Optionen</h3>
+        <label>Intervall (Min): <select id="opt-chart-interval">
+          <option value="1">1</option><option value="5" selected>5</option><option value="10">10</option>
+        </select></label>
+        <label>Zusammenf. (Min): <select id="opt-summary-interval">
+          <option value="5">5</option><option value="10">10</option><option value="60" selected>60</option>
+        </select></label>
+        <label><input type="checkbox" id="opt-candle"> Candlestick</label>
+        <button id="opt-close">Schließen</button>
       </div>
     </section>
 
-    <!-- News-Feed -->
-    <aside id="news">
-      <h2>Live News</h2>
-      <!-- JS füllt hier .news-item -->
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <!-- Live-Ticker -->
+      <div id="live-ticker">
+        <h2><i class="fa fa-bolt"></i> Live-Ticker</h2>
+        <div class="ticker-list" id="ticker-list"></div>
+      </div>
+      <!-- News -->
+      <div id="news">
+        <h2><i class="fa fa-newspaper"></i> Live News</h2>
+      </div>
+      <!-- Portfolio -->
+      <div id="portfolio">
+        <h2><i class="fa fa-wallet"></i> Demo-Portfolio</h2>
+        <p>Guthaben: <strong id="portfolio-cash">15.00 €</strong>
+          <button id="btn-deposit"><i class="fa fa-plus"></i> +5 €</button>
+        </p>
+        <table>
+          <thead><tr>
+            <th>Symbol</th><th>Qty</th><th>Kurs</th><th>Wert</th><th>Aktion</th>
+          </tr></thead>
+          <tbody id="portfolio-table"></tbody>
+        </table>
+        <p>Wert gesamt: <strong id="portfolio-total">0.00 €</strong>
+           | P/L: <strong id="portfolio-pnl">0.00 €</strong></p>
+      </div>
     </aside>
   </main>
 
-  <!-- =================
-       FOOTER TICKER
-       ================= -->
-  <footer id="ticker">
-    <!-- JS füllt hier .ticker-item -->
-  </footer>
-
-  <!-- =================
-       MODALS
-       ================= -->
-  <!-- Chart Modal (Größere Ansicht) -->
-  <div class="modal-overlay" id="modal-chart">
-    <div class="modal">
-      <button class="modal-close" onclick="closeModal('modal-chart')">&times;</button>
-      <h2 id="modal-chart-title">Chart</h2>
-      <div id="modal-chart-content" style="height:500px;"></div>
+  <!-- News Detail Overlay -->
+  <div id="news-detail-overlay">
+    <div id="news-detail">
+      <button class="close-btn"><i class="fa fa-times"></i></button>
+      <h2 id="nd-title"></h2>
+      <img id="nd-img" src="" alt="" style="width:100%;border-radius:4px;margin-bottom:var(--gap)">
+      <p><strong>Autor:</strong> <span id="nd-author"></span></p>
+      <p><strong>Veröffentlicht:</strong> <span id="nd-published"></span></p>
+      <p id="nd-desc"></p>
+      <div id="nd-tags" class="tags"></div>
+      <p><a id="nd-link" href="" target="_blank">→ Artikel öffnen</a></p>
     </div>
   </div>
 
-  <!-- Calculator Modal -->
-  <div class="modal-overlay" id="modal-calc">
-    <div class="modal">
-      <button class="modal-close" onclick="closeModal('modal-calc')">&times;</button>
-      <h2>Taschenrechner</h2>
-      <input type="text" id="calc-display" readonly style="width:100%; font-size:1.2rem; margin-bottom:8px; padding:4px;">
-      <div style="display:grid; grid-template-columns: repeat(4,1fr); gap:4px;">
-        <!-- Buttons 0-9, + - * /, =, C -->
-        <button onclick="calcInput('7')">7</button>
-        <button onclick="calcInput('8')">8</button>
-        <button onclick="calcInput('9')">9</button>
-        <button onclick="calcInput('/')">÷</button>
-
-        <button onclick="calcInput('4')">4</button>
-        <button onclick="calcInput('5')">5</button>
-        <button onclick="calcInput('6')">6</button>
-        <button onclick="calcInput('*')">×</button>
-
-        <button onclick="calcInput('1')">1</button>
-        <button onclick="calcInput('2')">2</button>
-        <button onclick="calcInput('3')">3</button>
-        <button onclick="calcInput('-')">−</button>
-
-        <button onclick="calcInput('0')">0</button>
-        <button onclick="calcInput('.')">.</button>
-        <button onclick="calcEval()">=</button>
-        <button onclick="calcClear()">C</button>
+  <!-- Rechner Panel -->
+  <div id="calc-panel">
+    <div id="calc-header">
+      <h2><i class="fa fa-calculator"></i> Rechner</h2>
+      <button id="calc-toggle"><i class="fa fa-chevron-down"></i></button>
+    </div>
+    <div id="calc-body">
+      <input type="text" id="calc-display" readonly>
+      <div id="calc-buttons">
+        <button onclick="ci('7')">7</button><button onclick="ci('8')">8</button><button onclick="ci('9')">9</button><button onclick="ci('/')">÷</button>
+        <button onclick="ci('4')">4</button><button onclick="ci('5')">5</button><button onclick="ci('6')">6</button><button onclick="ci('*')">×</button>
+        <button onclick="ci('1')">1</button><button onclick="ci('2')">2</button><button onclick="ci('3')">3</button><button onclick="ci('-')">−</button>
+        <button onclick="ci('0')">0</button><button onclick="ci('.')">.</button><button onclick="ce()">C</button><button onclick="ceval()">=</button>
       </div>
     </div>
   </div>
 
-  <!-- Currency Converter Modal -->
-  <div class="modal-overlay" id="modal-conv">
-    <div class="modal">
-      <button class="modal-close" onclick="closeModal('modal-conv')">&times;</button>
-      <h2>Währungsrechner</h2>
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <input type="number" id="conv-amount" placeholder="Betrag" style="flex:1;">
-        <select id="conv-from">
-          <option>EUR</option><option>USD</option><option>INR</option><option>GBP</option><option>JPY</option>
-        </select>
-        <select id="conv-to">
-          <option>EUR</option><option>USD</option><option>INR</option><option>GBP</option><option>JPY</option>
-        </select>
-      </div>
-      <button onclick="doConvert()">Umrechnen</button>
-      <div id="conv-result" style="margin-top:8px; font-weight:bold;"></div>
-    </div>
-  </div>
+  <!-- FOOTER -->
+  <footer id="footer-ticker"></footer>
 
-  <!-- =================
-       JAVASCRIPT
-       ================= -->
   <script>
-  // ----------------------------------------------------
-  // 1) BASIS-DATEN & API KEYS
-  // ----------------------------------------------------
-  const STOCKS = ['AAPL','MSFT','AMZN','NVDA','META','TSLA','V','JPM','BABA','ASML'];
-  const CRYPTOS = ['BTCUSDT','ETHUSDT','BNBUSDT','USDCUSDT','XRPUSDT','SOLUSDT','LTCUSDT','MATICUSDT','SHIBUSDT'];
+  // === 1) API-Keys & Basis ===
+  const NEWS_API_KEY    = 'DEIN_NEWSAPI_KEY';
+  const FINNHUB_KEY     = 'DEIN_FINNHUB_KEY';
+  const EXCHANGE_KEY    = 'DEIN_EXCHANGE_RATE_API_KEY';
+  const STOCKS  = ['AAPL','MSFT','AMZN','NVDA','META','TSLA','V','JPM','BABA','ASML'];
+  const CRYPTOS = ['BTCUSDT','ETHUSDT','BNBUSDT','USDCUSDT','XRPUSDT','SOLUSUSDT','LTCUSDT','MATICUSDT','SHIBUSDT'];
   const ALL = [...STOCKS, ...CRYPTOS];
+  let exchangeRates={}, lastPrices={}, summaryTimer, portfolio={cash:15,positions:{}}, currentSymbol, wsChart;
+  let rawTimestamps=[], rawPrices=[];
+  const varC = n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-  const NEWS_API_KEY = 'DEIN_NEWSAPI_KEY';
-  const FINNHUB_KEY    = 'DEIN_FINNHUB_KEY';
-  const EXCHANGE_KEY   = 'DEIN_EXCHANGE_RATE_API_KEY';
-
-  let exchangeRates = { EUR:1 };
-
-  // Utility CSS variable reader
-  const varC = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-  // ----------------------------------------------------
-  // 2) UTILITY: MODAL HANDLER
-  // ----------------------------------------------------
-  function openModal(id) {
-    document.getElementById(id).classList.add('active');
-  }
-  function closeModal(id) {
-    document.getElementById(id).classList.remove('active');
-  }
-
-  // ----------------------------------------------------
-  // 3) UHR & MARKET SESSIONS
-  // ----------------------------------------------------
-  function updateClock() {
-    document.getElementById('clock').innerText =
+  // === 2) Uhr & Sessions ===
+  function updClock(){
+    document.getElementById('clock').innerText=
       new Date().toLocaleTimeString('de-DE',{hour12:false});
   }
-  setInterval(updateClock,1000);
-  updateClock();
-
-  const sessions = [
-    { name:'Europa', open:9,   close:17.5 },
-    { name:'USA',    open:15.5, close:22   },
-    { name:'Asien',  open:2,    close:8    }
-  ];
-  function updateMarkets() {
-    const now = new Date();
-    // convert to CET hours decimal
-    const CET = now.getUTCHours() + now.getTimezoneOffset()/60 + 1;
-    document.getElementById('markets').innerText =
-      sessions.map(s =>
-        (CET >= s.open && CET < s.close ? '🟢' : '🔴') + s.name
-      ).join(' ');
+  setInterval(updClock,1000); updClock();
+  const sessions=[{n:'Europa',o:9,c:17.5},{n:'USA',o:15.5,c:22},{n:'Asien',o:2,c:8}];
+  function updSessions(){
+    const now=new Date(), CET=now.getUTCHours()+now.getTimezoneOffset()/60+1;
+    document.getElementById('sessions').innerText=
+      sessions.map(s=>(CET>=s.o&&CET<s.c?'🟢':'🔴')+s.n).join(' ');
   }
-  setInterval(updateMarkets,60000);
-  updateMarkets();
+  setInterval(updSessions,60000); updSessions();
 
-  // ----------------------------------------------------
-  // 4) LOAD EXCHANGE RATES
-  // ----------------------------------------------------
-  async function loadExchange() {
-    try {
-      const res = await fetch(`https://v6.exchangerate-api.com/v6/${EXCHANGE_KEY}/latest/EUR`);
-      const json = await res.json();
-      exchangeRates = json.conversion_rates;
-    } catch(e) {
-      console.error('Exchange load error', e);
-    }
+  // === 3) Exchange Rates ===
+  async function loadExch(){
+    try{
+      const res=await fetch(`https://v6.exchangerate-api.com/v6/${EXCHANGE_KEY}/latest/EUR`);
+      exchangeRates=(await res.json()).conversion_rates;
+    }catch(e){console.error(e);}
   }
-  loadExchange();
-
-  function convert(v) {
-    const cur = document.getElementById('currency-select').value;
-    return (v * (exchangeRates[cur]||1)).toFixed(2) + ' ' + cur;
-  }
-
-  document.getElementById('currency-select')
-    .addEventListener('change', () => {
-      updateAllTickers();
-      if (currentSymbol) renderChart(currentSymbol, true);
-    });
-
-  // ----------------------------------------------------
-  // 5) TICKER-SETUP (Stocks & Crypto)
-  // ----------------------------------------------------
-  const tickerEl = document.getElementById('ticker');
-  function ensureTicker(sym) {
-    if (!document.getElementById('tick-'+sym)) {
-      const sp = document.createElement('span');
-      sp.id = 'tick-'+sym;
-      sp.className = 'ticker-item';
-      tickerEl.append(sp);
-    }
-  }
-
-  // --- Stocks via Finnhub ---
-  const wsStocks = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
-  wsStocks.onopen = () => {
-    STOCKS.forEach(s => wsStocks.send(JSON.stringify({ type:'subscribe', symbol:'O:'+s })));
-  };
-  wsStocks.onmessage = e => {
-    const msg = JSON.parse(e.data);
-    msg.data?.forEach(u => {
-      const sym = u.s.replace('O:','');
-      ensureTicker(sym);
-      const price = u.p;
-      const text = `${sym}: ${convert(price)}`;
-      const el = document.getElementById('tick-'+sym);
-      el.innerText = text;
-      el.dataset.raw = price;
-    });
-  };
-
-  // --- Crypto via Binance ---
-  const wsCrypto = new WebSocket('wss://stream.binance.com:9443/ws/!ticker@arr');
-  wsCrypto.onmessage = e => {
-    JSON.parse(e.data).forEach(u => {
-      if (CRYPTOS.includes(u.s)) {
-        ensureTicker(u.s);
-        const price = parseFloat(u.c);
-        const text = `${u.s}: ${convert(price)}`;
-        const el = document.getElementById('tick-'+u.s);
-        el.innerText = text;
-        el.dataset.raw = price;
-      }
-    });
-  };
-
-  function updateAllTickers() {
-    ALL.forEach(sym => {
-      const el = document.getElementById('tick-'+sym);
-      if (el && el.dataset.raw) {
-        el.innerText = `${sym}: ${convert(parseFloat(el.dataset.raw))}`;
-      }
-    });
-  }
-
-  // ----------------------------------------------------
-  // 6) SYMBOL-SELECTOR
-  // ----------------------------------------------------
-  const sel = document.getElementById('symbol-select');
-  ALL.forEach(s => sel.add(new Option(s,s)));
-  let currentSymbol = null;
-  sel.addEventListener('change', () => {
-    const sym = sel.value;
-    currentSymbol = sym;
-    document.getElementById('current-price').innerText =
-      document.getElementById('tick-'+sym)?.innerText || '–';
-    renderChart(sym, false);
+  loadExch();
+  document.getElementById('currency-select').addEventListener('change',()=>{
+    renderTickers(); if(currentSymbol) renderChart(currentSymbol,false);
   });
-
-  // ----------------------------------------------------
-  // 7) CHART-RENDERING
-  // ----------------------------------------------------
-  const chartDiv     = document.getElementById('chart-main');
-  const chartTitle   = document.getElementById('chart-title');
-  let wsChart        = null;
-  let modalWsChart   = null;
-
-  function clearOldChart(ws) {
-    if (ws) ws.close();
-    Plotly.purge(chartDiv);
+  function conv(v){
+    const cur=document.getElementById('currency-select').value;
+    return (v*(exchangeRates[cur]||1)).toFixed(2)+' '+cur;
   }
 
-  async function renderChart(sym, isUpdate) {
-    // wenn Refresh durch Währungswechsel
-    if (!isUpdate) clearOldChart(wsChart);
-    chartTitle.innerText = sym;
-    // Unsubscribe modal too
-    if (modalWsChart) modalWsChart.close();
-
-    // Chart-Parameter
-    const isCrypto = CRYPTOS.includes(sym);
-    const dataTrace = isCrypto
-      ? { x:[], open:[], high:[], low:[], close:[], type:'candlestick',
-          increasing:{line:{color:varC('--pos')}}, decreasing:{line:{color:varC('--neg')}} }
-      : { x:[], y:[], mode:'lines', line:{color:varC('--line')} };
-
-    Plotly.newPlot(chartDiv,[dataTrace], {
-      plot_bgcolor:varC('--bg'), paper_bgcolor:varC('--bg'),
-      xaxis:{ gridcolor:'#333', color:varC('--fg') },
-      yaxis:{ gridcolor:'#333', color:varC('--fg') }
-    }, {responsive:true});
-
-    // WS für Hauptchart
-    if (isCrypto) {
-      wsChart = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_1m`);
-      wsChart.onmessage = e => {
-        const k = JSON.parse(e.data).k;
-        const t = new Date(k.t);
-        const factor = exchangeRates[document.getElementById('currency-select').value] || 1;
-        Plotly.extendTraces(chartDiv, {
-          x:[[t]],
-          open:[[k.o*factor]], high:[[k.h*factor]], low:[[k.l*factor]], close:[[k.c*factor]]
-        },[0]);
-      };
-    } else {
-      wsChart = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
-      wsChart.onopen = () => wsChart.send(JSON.stringify({ type:'subscribe', symbol:'O:'+sym }));
-      wsChart.onmessage = e => {
-        const msg = JSON.parse(e.data);
-        msg.data?.forEach(u => {
-          const t = new Date(u.t);
-          const val = u.p * (exchangeRates[document.getElementById('currency-select').value]||1);
-          Plotly.extendTraces(chartDiv, { x:[[t]], y:[[val]] }, [0]);
-        });
-      };
-    }
-
-    // Klick öffnet Modal mit großem Chart
-    chartDiv.onclick = () => openModalChart(sym, isCrypto);
-  }
-
-  // ----------------------------------------------------
-  // 8) MODAL-CHART (GROSSANSICHT)
-  // ----------------------------------------------------
-  function openModalChart(sym, isCrypto) {
-    const title = document.getElementById('modal-chart-title');
-    const content = document.getElementById('modal-chart-content');
-    title.innerText = `Großansicht: ${sym}`;
-    content.innerHTML = '<div id="modal-plot" style="width:100%;height:100%;"></div>';
-    openModal('modal-chart');
-
-    // Erzeuge Plotly im Modal
-    const trace = isCrypto
-      ? { x:[], open:[], high:[], low:[], close:[], type:'candlestick',
-          increasing:{line:{color:varC('--pos')}}, decreasing:{line:{color:varC('--neg')}} }
-      : { x:[], y:[], mode:'lines', line:{color:varC('--line')} };
-
-    Plotly.newPlot('modal-plot', [trace], {
-      plot_bgcolor:varC('--bg'), paper_bgcolor:varC('--bg'),
-      xaxis:{gridcolor:'#333',color:varC('--fg')},
-      yaxis:{gridcolor:'#333',color:varC('--fg')}
-    }, {responsive:true});
-
-    // Websocket für Modal
-    if (isCrypto) {
-      modalWsChart = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_1m`);
-      modalWsChart.onmessage = e => {
-        const k = JSON.parse(e.data).k;
-        const t = new Date(k.t);
-        const factor = exchangeRates[document.getElementById('currency-select').value]||1;
-        Plotly.extendTraces('modal-plot', {
-          x:[[t]],
-          open:[[k.o*factor]], high:[[k.h*factor]], low:[[k.l*factor]], close:[[k.c*factor]]
-        }, [0]);
-      };
-    } else {
-      modalWsChart = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
-      modalWsChart.onopen = () => modalWsChart.send(JSON.stringify({ type:'subscribe', symbol:'O:'+sym }));
-      modalWsChart.onmessage = e => {
-        const msg = JSON.parse(e.data);
-        msg.data?.forEach(u => {
-          const t = new Date(u.t);
-          const val = u.p * (exchangeRates[document.getElementById('currency-select').value]||1);
-          Plotly.extendTraces('modal-plot', { x:[[t]], y:[[val]] }, [0]);
-        });
-      };
-    }
-  }
-
-  // ----------------------------------------------------
-  // 9) LIVE NEWS
-  // ----------------------------------------------------
-  async function loadNews() {
-    try {
-      const res = await fetch(
-        `https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=5&apiKey=${NEWS_API_KEY}`
-      );
-      const json = await res.json();
-      const container = document.getElementById('news');
-      // alte News entfernen
-      container.querySelectorAll('.news-item').forEach(n => n.remove());
-      // neue Artikel
-      json.articles.forEach(a => {
-        const div = document.createElement('div');
-        div.className = 'news-item';
-        const img = a.urlToImage
-          ? `<img class="news-thumb" src="${a.urlToImage}" alt="">`
-          : `<div class="news-thumb"></div>`;
-        div.innerHTML = `
-          ${img}
+  // === 4) Live-News ===
+  async function loadNews(){
+    try{
+      const res=await fetch(`https://newsapi.org/v2/top-headlines?category=business&language=de&pageSize=6&apiKey=${NEWS_API_KEY}`);
+      const {articles}=await res.json();
+      const c=document.getElementById('news');
+      c.querySelectorAll('.news-item').forEach(n=>n.remove());
+      articles.forEach(a=>{
+        const div=document.createElement('div'); div.className='news-item';
+        div.innerHTML=`
+          ${a.urlToImage?`<img class="news-thumb" src="${a.urlToImage}">`:`<div class="news-thumb"></div>`}
           <div class="news-content">
             <p class="news-title">${a.title}</p>
             <div class="news-meta">
               <span>${a.source.name}</span>
               <span>${new Date(a.publishedAt).toLocaleTimeString('de-DE',{hour12:false})}</span>
             </div>
-            <a href="${a.url}" target="_blank" style="font-size:0.75rem; color:var(--line)">→ Mehr</a>
           </div>`;
-        container.append(div);
+        div.addEventListener('click',()=>showNewsDetail(a));
+        c.append(div);
       });
-    } catch(e) {
-      console.error('News error', e);
+    }catch(e){console.error(e);}
+  }
+  setInterval(loadNews,300000); loadNews();
+  function showNewsDetail(a){
+    document.getElementById('nd-title').innerText=a.title;
+    document.getElementById('nd-img').src=a.urlToImage||'';
+    document.getElementById('nd-author').innerText=a.author||'Unbekannt';
+    document.getElementById('nd-published').innerText=new Date(a.publishedAt).toLocaleString('de-DE');
+    document.getElementById('nd-desc').innerText=a.content||'';
+    const tags=(a.description||'').split(' ').slice(0,5);
+    document.getElementById('nd-tags').innerHTML=tags.map(t=>`<span class="tag">${t}</span>`).join('');
+    const l=document.getElementById('nd-link'); l.href=a.url; l.innerText='→ Zum Artikel';
+    document.getElementById('news-detail-overlay').classList.add('active');
+  }
+  document.querySelector('#news-detail .close-btn')
+    .addEventListener('click',()=>document.getElementById('news-detail-overlay').classList.remove('active'));
+
+  // === 5) Live-Ticker Sidebar & Footer ===
+  const sideT=document.getElementById('ticker-list'), footT=document.getElementById('footer-ticker');
+  function ensure(sym,parent){
+    if(!document.getElementById(`tick-${sym}`)){
+      const el=document.createElement('div');
+      el.id=`tick-${sym}`; el.className='ticker-item'; el.innerText=sym+': …';
+      parent.append(el); lastPrices[sym]=null;
     }
   }
-  loadNews();
-  setInterval(loadNews, 300_000);
+  function updTick(sym,price,parent){
+    ensure(sym,parent);
+    const el=document.getElementById(`tick-${sym}`);
+    const last=lastPrices[sym], pct=last?((price-last)/last*100).toFixed(2):'0.00';
+    lastPrices[sym]=price; const sign=pct>=0?'+':'';
+    el.innerText=`${sym}: ${conv(price)} (${sign}${pct}%)`;
+    el.style.color=pct>=0?varC('--pos'):varC('--neg');
+  }
+  // Finnhub WS
+  const wsS=new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
+  wsS.onopen=()=>STOCKS.forEach(s=>wsS.send(JSON.stringify({type:'subscribe',symbol:'O:'+s})));
+  wsS.onmessage=e=>JSON.parse(e.data).data?.forEach(u=>{
+    const s=u.s.replace('O:',''); updTick(s,u.p,sideT); updTick(s,u.p,footT);
+  });
+  // Binance WS
+  const wsC=new WebSocket('wss://stream.binance.com:9443/ws/!ticker@arr');
+  wsC.onmessage=e=>JSON.parse(e.data).forEach(u=>{
+    if(CRYPTOS.includes(u.s)){ const p=parseFloat(u.c); updTick(u.s,p,sideT); updTick(u.s,p,footT); }
+  });
+  function renderTickers(){
+    ALL.forEach(sym=>{ if(lastPrices[sym]!=null){
+      const el=document.getElementById(`tick-${sym}`);
+      if(el) el.innerText=`${sym}: ${conv(lastPrices[sym])}`;
+    }});
+  }
+  let tickTimer=setInterval(renderTickers,300000);
+  document.getElementById('btn-options').addEventListener('click',()=>{
+    document.getElementById('popup-options').classList.toggle('active');
+  });
+  document.getElementById('opt-close').addEventListener('click',()=>{
+    document.getElementById('popup-options').classList.remove('active');
+  });
 
-  // ----------------------------------------------------
-  // 10) TASCHENRECHNER
-  // ----------------------------------------------------
-  function calcInput(v) {
-    const d = document.getElementById('calc-display');
-    d.value += v;
+  // === 6) Symbol-Auswahl & Chart ===
+  const sel=document.getElementById('symbol-select');
+  ALL.forEach(s=>sel.add(new Option(s,s)));
+  sel.addEventListener('change',()=>{
+    currentSymbol=sel.value;
+    document.getElementById('current-price').innerText =
+      document.getElementById(`tick-${currentSymbol}`)?.innerText||'–';
+    renderChart(currentSymbol,false); resetSummary();
+    document.getElementById('btn-buy').disabled=false;
+    document.getElementById('btn-sell').disabled=false;
+  });
+
+  const chartDiv=document.getElementById('chart-main'), summaryDiv=document.getElementById('chart-summary');
+  function clearChart(){
+    if(wsChart) wsChart.close();
+    Plotly.purge(chartDiv);
   }
-  function calcClear() {
-    document.getElementById('calc-display').value = '';
-  }
-  function calcEval() {
-    const d = document.getElementById('calc-display');
-    try {
-      // eslint-disable-next-line no-eval
-      d.value = eval(d.value);
-    } catch {
-      d.value = 'Error';
+  function renderChart(sym,isUpdate){
+    if(!isUpdate) clearChart();
+    const useCandle=document.getElementById('opt-candle').checked;
+    const interval=parseInt(document.getElementById('opt-chart-interval').value);
+    const isCry=CRYPTOS.includes(sym);
+    const trace = useCandle||isCry
+      ? {x:[],open:[],high:[],low:[],close:[],type:'candlestick',
+         increasing:{line:{color:varC('--pos')}},decreasing:{line:{color:varC('--neg')}}}
+      : {x:[],y:[],mode:'lines',line:{color:varC('--line')}};
+    Plotly.newPlot(chartDiv,[trace],{
+      plot_bgcolor:varC('--bg'),paper_bgcolor:varC('--bg'),
+      xaxis:{gridcolor:'#333',color:varC('--fg')},
+      yaxis:{gridcolor:'#333',color:varC('--fg')}
+    },{responsive:true});
+    rawTimestamps=[]; rawPrices=[];
+    if(isCry){
+      wsChart=new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_${interval}m`);
+      wsChart.onmessage=e=>{
+        const k=JSON.parse(e.data).k, t=new Date(k.t), f=exchangeRates[document.getElementById('currency-select').value]||1;
+        Plotly.extendTraces(chartDiv,{x:[[t]],open:[[k.o*f]],high:[[k.h*f]],low:[[k.l*f]],close:[[k.c*f]]},[0]);
+        rawTimestamps.push(t); rawPrices.push(k.c*f);
+        updateIndicators();
+      };
+    } else {
+      wsChart=new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_KEY}`);
+      wsChart.onopen=()=>wsChart.send(JSON.stringify({type:'subscribe',symbol:'O:'+sym}));
+      wsChart.onmessage=e=>{
+        JSON.parse(e.data).data?.forEach(u=>{
+          const t=new Date(u.t), v=u.p*(exchangeRates[document.getElementById('currency-select').value]||1);
+          Plotly.extendTraces(chartDiv,{x:[[t]],y:[[v]]},[0]);
+          rawTimestamps.push(t); rawPrices.push(v);
+          updateIndicators();
+        });
+      };
     }
   }
 
-  // ----------------------------------------------------
-  // 11) WÄHRUNGSRECHNER
-  // ----------------------------------------------------
-  function doConvert() {
-    const amt  = parseFloat(document.getElementById('conv-amount').value) || 0;
-    const from = document.getElementById('conv-from').value;
-    const to   = document.getElementById('conv-to').value;
-    const rate = (exchangeRates[to]||1) / (exchangeRates[from]||1);
-    const res  = (amt * rate).toFixed(4);
-    document.getElementById('conv-result').innerText = `${res} ${to}`;
+  // === 7) Chart-Indikatoren & Pattern ===
+  function calculateSMA(data,period){
+    const sma=[]; for(let i=0;i<data.length;i++){
+      if(i<period-1){ sma.push(null); continue;}
+      const slice=data.slice(i-period+1,i+1);
+      sma.push(slice.reduce((s,d)=>s+d,0)/period);
+    } return sma;
+  }
+  function calculateStdDev(data,period){
+    const sd=[]; for(let i=0;i<data.length;i++){
+      if(i<period-1){ sd.push(null); continue;}
+      const slice=data.slice(i-period+1,i+1);
+      const avg=slice.reduce((s,d)=>s+d,0)/period;
+      const varr=slice.reduce((s,d)=>s+(d-avg)**2,0)/period;
+      sd.push(Math.sqrt(varr));
+    } return sd;
+  }
+  function updateIndicators(){
+    if(rawPrices.length<60) return;
+    const sma20=calculateSMA(rawPrices,20), sma50=calculateSMA(rawPrices,50);
+    const sd20=calculateStdDev(rawPrices,20);
+    const upper=sma20.map((m,i)=>m!=null?m+2*sd20[i]:null);
+    const lower=sma20.map((m,i)=>m!=null?m-2*sd20[i]:null);
+    Plotly.deleteTraces(chartDiv,[1,2,3,4,5]);
+    Plotly.addTraces(chartDiv,[
+      {x:rawTimestamps,y:sma20,mode:'lines',line:{dash:'dot',width:2,color:'orange'},name:'SMA20'},
+      {x:rawTimestamps,y:sma50,mode:'lines',line:{dash:'dash',width:2,color:'yellow'},name:'SMA50'},
+      {x:rawTimestamps,y:upper,mode:'lines',line:{width:1,color:'green'},name:'Upper BB'},
+      {x:rawTimestamps,y:lower,mode:'lines',line:{width:1,color:'red'},name:'Lower BB'},
+      {x:rawTimestamps,y:rawPrices, type:'bar', yaxis:'y2',marker:{color:varC('--line')},name:'Volumen'} 
+    ]);
+    checkSMACross(sma20,sma50);
+  }
+  function checkSMACross(s, l){
+    const n=s.length; if(n<2) return;
+    const prev=s[n-2]-l[n-2], curr=s[n-1]-l[n-1];
+    if(prev<0&&curr>0) triggerAlert('🔔 Golden Cross!');
+    if(prev>0&&curr<0) triggerAlert('🔔 Death Cross!');
+  }
+  function triggerAlert(msg){
+    alert(msg);
+    if(Notification.permission==='granted') new Notification('o.y-finmag', {body:msg});
+  }
+  if('Notification' in window && Notification.permission!=='granted'){
+    Notification.requestPermission();
   }
 
-  // ----------------------------------------------------
-  // INITIALISIERUNG
-  // ----------------------------------------------------
-  // setze Default-Symbol
-  sel.value = ALL[0];
-  sel.dispatchEvent(new Event('change'));
+  // === 8) Chart-Zusammenfassung ===
+  let sumData=[];
+  function resetSummary(){
+    sumData=[]; summaryDiv.innerText='';
+    if(summaryTimer) clearInterval(summaryTimer);
+    summaryTimer=setInterval(doSummary, parseInt(document.getElementById('opt-summary-interval').value)*60000);
+  }
+  document.getElementById('btn-summary').addEventListener('click',doSummary);
+  function doSummary(){
+    if(!currentSymbol||lastPrices[currentSymbol]==null) return;
+    const cur=lastPrices[currentSymbol], prev=sumData.length?sumData[sumData.length-1]:cur;
+    const pct=prev?((cur-prev)/prev*100).toFixed(2):'0.00', sign=pct>=0?'+':'';
+    const stat=pct>=0?'positiv':'negativ';
+    summaryDiv.innerText=`Summary (${new Date().toLocaleTimeString('de-DE',{hour12:false})}): ${currentSymbol} ist ${stat} (${sign}${pct}%) seit letztem Intervall.`;
+    sumData.push(cur);
+  }
+
+  // === 9) Demo-Portfolio & Trades ===
+  const pcash=document.getElementById('portfolio-cash'), ptable=document.getElementById('portfolio-table');
+  const ptotal=document.getElementById('portfolio-total'), ppnl=document.getElementById('portfolio-pnl');
+  document.getElementById('btn-deposit').addEventListener('click',()=>{
+    portfolio.cash+=5; updatePortfolioUI();
+  });
+  function trade(sym,side){
+    const price=lastPrices[sym]||0;
+    const qty=parseFloat(prompt(`${side==='buy'?'Kaufen':'Verkaufen'} ${sym} – Menge:`));
+    if(!qty||qty<=0) return;
+    if(side==='buy'){
+      const cost=qty*price; if(cost>portfolio.cash){alert('Nicht genug Cash!'); return;}
+      portfolio.cash-=cost;
+      portfolio.positions[sym]=(portfolio.positions[sym]||{qty:0});
+      portfolio.positions[sym].qty+=qty;
+    } else {
+      if(!portfolio.positions[sym]||qty>portfolio.positions[sym].qty){alert('Nicht genug Bestand!'); return;}
+      portfolio.positions[sym].qty-=qty; portfolio.cash+=qty*price;
+      if(portfolio.positions[sym].qty===0) delete portfolio.positions[sym];
+    }
+    document.getElementById('trade-sound').play();
+    updatePortfolioUI();
+  }
+  function updatePortfolioUI(){
+    pcash.innerText=portfolio.cash.toFixed(2)+' €';
+    ptable.innerHTML=''; let tot=0;
+    for(let s in portfolio.positions){
+      const pos=portfolio.positions[s], price=lastPrices[s]||0;
+      const val=pos.qty*price; tot+=val;
+      const tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td>${s}</td>
+        <td>${pos.qty}</td>
+        <td>${conv(price)}</td>
+        <td>${val.toFixed(2)} €</td>
+        <td>
+          <button onclick="trade('${s}','sell')"><i class="fa fa-cart-arrow-down"></i></button>
+        </td>`;
+      ptable.append(tr);
+    }
+    const pnl=tot+portfolio.cash-15;
+    ptotal.innerText=tot.toFixed(2)+' €';
+    ppnl.innerText=(pnl>=0?'+':'')+pnl.toFixed(2)+' €';
+  }
+
+  // === 10) Export CSV/PDF ===
+  document.getElementById('btn-export-csv').addEventListener('click',exportCSV);
+  function exportCSV(){
+    const rows=rawTimestamps.map((t,i)=>`${t.toISOString()},${rawPrices[i].toFixed(2)}`);
+    const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='chart_export.csv'; a.click();
+  }
+  document.getElementById('btn-export-pdf').addEventListener('click',exportPDF);
+  async function exportPDF(){
+    const { jsPDF } = window.jspdf;
+    const doc=new jsPDF();
+    doc.text('Preisverlauf (letzte 20 Min)',10,10);
+    const tableCols=['Uhrzeit','Preis'], tableRows=[];
+    const cutoff=Date.now()-20*60*1000;
+    rawTimestamps.forEach((t,i)=>{
+      if(t.getTime()>=cutoff){
+        const color= i>0&&rawPrices[i]>rawPrices[i-1]?'green':'red';
+        tableRows.push([t.toLocaleTimeString(), rawPrices[i].toFixed(2)]);
+      }
+    });
+    doc.autoTable({ head:[tableCols], body:tableRows, startY:20 });
+    doc.save('chart_export.pdf');
+  }
+
+  // === 11) Rechner Panel ===
+  const calcPanel=document.getElementById('calc-panel'), calcToggle=document.getElementById('calc-toggle');
+  const calcDisp=document.getElementById('calc-display');
+  calcToggle.addEventListener('click',()=>{
+    if(calcPanel.classList.toggle('active')){
+      calcToggle.innerHTML='<i class="fa fa-chevron-up"></i>';
+    } else calcToggle.innerHTML='<i class="fa fa-chevron-down"></i>';
+  });
+  function ci(v){ calcDisp.value+=v; }
+  function ce(){ calcDisp.value=''; }
+  function ceval(){
+    try{ calcDisp.value=eval(calcDisp.value); }
+    catch{ calcDisp.value='Error'; }
+  }
+
+  // === Init ===
+  sel.value=ALL[0]; sel.dispatchEvent(new Event('change'));
+  updatePortfolioUI();
   </script>
 </body>
 </html>
